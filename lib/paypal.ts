@@ -98,3 +98,23 @@ export async function sendInvoice(id: string) {
 export async function getInvoice(id: string) {
   return paypalFetch(`/v2/invoicing/invoices/${id}`);
 }
+
+export async function listInvoices(limit = 10) {
+  const data = await paypalFetch(`/v2/invoicing/invoices?page=1&page_size=${limit}`);
+  return (data.items ?? []).map((i: any) => ({
+    id: i.id,
+    status: i.status,
+    client: i.primary_recipients?.[0]?.billing_info?.business_name ?? null,
+    email: i.primary_recipients?.[0]?.billing_info?.email_address ?? null,
+    amount: i.amount?.value ?? null,
+    currency: i.amount?.currency_code ?? i.detail?.currency_code ?? null,
+    due_date: i.detail?.payment_term?.due_date ?? null,
+  }));
+}
+
+export async function sendReminder(id: string, subject: string, note: string) {
+  return paypalFetch(`/v2/invoicing/invoices/${id}/remind`, {
+    method: "POST",
+    body: JSON.stringify({ subject, note, send_to_invoicer: false }),
+  });
+}

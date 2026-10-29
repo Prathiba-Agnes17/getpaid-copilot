@@ -1,0 +1,65 @@
+import { generate } from "./llm";
+import { functionDeclarations, RISKY, runSafeTool, queueRiskyTool } from "./tools";
+import type { PendingAction } from "./db";
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  text: string;
+}
+
+const SYSTEM = `You are Collections Copilot, an assistant that helps freelancers and small businesses
+get paid using PayPal invoices.
+- Use the tools to look up, draft, send and chase invoices. Never invent invoice IDs or data.
+- If the user hasn't given a client email, amount or description for a new invoice, ask for it.
+- Sending an invoice or a reminder requires the user's approval. After you call send_invoice or
+  send_reminder, tell the user it is waiting for their approval. Never say it has been sent.
+- Reminders should be polite, short and mention the amount and due date.
+- Be concise.`;
+
+export async function runAgent(history: ChatMessage[]) {
+  const contents: any[] = history.map((m) => ({
+    role: m.role === "user" ? "user" : "model",
+    parts: [{ text: m.text }],
+  }));
+  const newPending: PendingAction[] = [];
+
+  for (let round = 0; round < 6; round++) {
+    const res = await generate({
+      contents,
+      config: { systemInstruction: SYSTEM, tools: [{ functionDeclarations }] },
+    });
+
+    const calls = res.functionCalls ?? [];
+    if (calls.length === 0) return { reply: res.text ?? "", pending: newPending };
+
+    // Keep the model's turn exactly as returned (Gemini needs this intact)
+    const modelContent = res.candidates?.[0]?.content;
+    if (modelContent) contents.push(modelContent);
+
+    const responseParts: any[] = [];
+    for (const call of calls) {
+      const name = call.name as string;
+      const args = call.args ?? {};
+      let output: any;
+      try {
+        if (RISKY.has(name)) {
+          const p = await queueRiskyTool(name, args);
+          newPending.push(p);
+          output = {
+            status: "pending_approval",
+            action_id: p.id,
+            note: "NOT executed yet. Waiting for the user to approve it in the UI.",
+          };
+        } else {
+          output = await runSafeTool(name, args);
+        }
+      } catch (err: any) {
+        output = { error: String(err.message ?? err) };
+      }
+      responseParts.push({ functionResponse: { name, response: { output } } });
+    }
+    contents.push({ role: "user", parts: responseParts });
+  }
+
+  return { reply: "I reached my step limit. Please try a simpler request.", pending: newPending };
+}

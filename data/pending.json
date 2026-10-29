@@ -1,0 +1,15 @@
+[
+  {
+    "id": "782d212e-6a36-4e88-85c1-e7bcb6d243b8",
+    "tool": "send_invoice",
+    "args": {
+      "invoice_id": "INV2-TD4A-XSYJ-FE8T-E9TT"
+    },
+    "summary": "Send invoice INV2-TD4A-XSYJ-FE8T-E9TT (450.00 USD) to Acme Corp",
+    "status": "approved",
+    "createdAt": "2026-10-29T04:49:54.622Z",
+    "result": {
+      "sent": true
+    }
+  }
+]
