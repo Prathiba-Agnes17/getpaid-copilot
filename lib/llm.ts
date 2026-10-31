@@ -13,10 +13,11 @@ function getClient() {
 }
 
 export async function generate(params: { contents: any[]; config?: any }) {
-  const models = [
-    process.env.GEMINI_MODEL ?? "gemini-3.8-flash",
-    process.env.GEMINI_FALLBACK_MODEL,
-  ].filter(Boolean) as string[];
+    const fallbacks = (process.env.GEMINI_FALLBACK_MODELS ?? "")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+  const models = [process.env.GEMINI_MODEL ?? "gemini-3.8-flash", ...fallbacks];
   const delays = [1000, 3000, 8000];
   let lastErr: any;
 
@@ -30,6 +31,7 @@ export async function generate(params: { contents: any[]; config?: any }) {
         });
       } catch (err: any) {
         lastErr = err;
+        console.log(`[llm] ${model} attempt ${attempt + 1} failed: ${err?.status ?? err}`);
         if (err?.status !== 503 && err?.status !== 429) throw err;
         if (attempt < delays.length) await sleep(delays[attempt]);
       }

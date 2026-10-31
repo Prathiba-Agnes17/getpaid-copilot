@@ -7,10 +7,27 @@ export interface ChatMessage {
   text: string;
 }
 
-const SYSTEM = `You are Collections Copilot, an assistant that helps freelancers and small businesses
+export interface AgentStep {
+  tool: string;
+  label: string;
+  risky: boolean;
+  args: Record<string, any>;
+}
+
+const LABELS: Record<string, string> = {
+  list_invoices: "Looked up invoices in PayPal",
+  get_invoice_status: "Checked invoice status",
+  create_invoice_draft: "Created draft invoice",
+  send_invoice: "Queued invoice send, needs your approval",
+  send_reminder: "Queued payment reminder, needs your approval",
+};
+
+const SYSTEM = `You are GetPaid Copilot, an assistant that helps freelancers and small businesses
 get paid using PayPal invoices.
 - Use the tools to look up, draft, send and chase invoices. Never invent invoice IDs or data.
 - If the user hasn't given a client email, amount or description for a new invoice, ask for it.
+- Only call send_invoice or send_reminder when the user explicitly asks to send an invoice or a reminder.
+  If they only ask to create or draft an invoice, create the draft, then ask whether they want it sent.
 - Sending an invoice or a reminder requires the user's approval. After you call send_invoice or
   send_reminder, tell the user it is waiting for their approval. Never say it has been sent.
 - Reminders should be polite, short and mention the amount and due date.
@@ -22,6 +39,7 @@ export async function runAgent(history: ChatMessage[]) {
     parts: [{ text: m.text }],
   }));
   const newPending: PendingAction[] = [];
+  const steps: AgentStep[] = [];
 
   for (let round = 0; round < 6; round++) {
     const res = await generate({
@@ -30,16 +48,16 @@ export async function runAgent(history: ChatMessage[]) {
     });
 
     const calls = res.functionCalls ?? [];
-    if (calls.length === 0) return { reply: res.text ?? "", pending: newPending };
+    if (calls.length === 0) return { reply: res.text ?? "", pending: newPending, steps };
 
-    // Keep the model's turn exactly as returned (Gemini needs this intact)
     const modelContent = res.candidates?.[0]?.content;
     if (modelContent) contents.push(modelContent);
 
     const responseParts: any[] = [];
     for (const call of calls) {
       const name = call.name as string;
-      const args = call.args ?? {};
+      const args = (call.args ?? {}) as Record<string, any>;
+      steps.push({ tool: name, label: LABELS[name] ?? name, risky: RISKY.has(name), args });
       let output: any;
       try {
         if (RISKY.has(name)) {
@@ -61,5 +79,9 @@ export async function runAgent(history: ChatMessage[]) {
     contents.push({ role: "user", parts: responseParts });
   }
 
-  return { reply: "I reached my step limit. Please try a simpler request.", pending: newPending };
+  return {
+    reply: "I reached my step limit. Please try a simpler request.",
+    pending: newPending,
+    steps,
+  };
 }

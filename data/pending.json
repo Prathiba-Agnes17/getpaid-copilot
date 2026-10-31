@@ -11,5 +11,31 @@
     "result": {
       "sent": true
     }
+  },
+  {
+    "id": "bc62d95f-9b43-4f21-9c28-0a7310ed02c9",
+    "tool": "send_invoice",
+    "args": {
+      "invoice_id": "INV2-CRB3-TWPT-E7FB-M2QH"
+    },
+    "summary": "Send invoice INV2-CRB3-TWPT-E7FB-M2QH (450.00 USD) to Acme",
+    "status": "approved",
+    "createdAt": "2026-10-29T18:43:26.456Z",
+    "result": {
+      "sent": true
+    }
+  },
+  {
+    "id": "802a0a46-a0ff-4e53-9043-88613e0614bb",
+    "tool": "send_invoice",
+    "args": {
+      "invoice_id": "INV2-TAPD-F948-4KJ2-KEBF"
+    },
+    "summary": "Send invoice INV2-TAPD-F948-4KJ2-KEBF (450.00 USD) to Acme",
+    "status": "approved",
+    "createdAt": "2026-10-29T18:45:35.535Z",
+    "result": {
+      "sent": true
+    }
   }
 ]
