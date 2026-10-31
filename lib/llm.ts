@@ -1,40 +1,60 @@
 import { GoogleGenAI } from "@google/genai";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-let client: GoogleGenAI | null = null;
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(
+      () => reject(Object.assign(new Error("Model call timed out"), { status: 504 })),
+      ms
+    );
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      }
+    );
+  });
+}
 
+let client: GoogleGenAI | null = null;
 function getClient() {
   if (!client) {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("Missing GEMINI_API_KEY in .env.local");
+    if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
     client = new GoogleGenAI({ apiKey });
   }
   return client;
 }
 
-export async function generate(params: { contents: any[]; config?: any }) {
-    const fallbacks = (process.env.GEMINI_FALLBACK_MODELS ?? "")
+export async function generate(params: { contents: any[]; config?: any; models?: string[] }) {
+  const fallbacks = (process.env.GEMINI_FALLBACK_MODELS ?? "")
     .split(",")
     .map((m) => m.trim())
     .filter(Boolean);
-  const models = [process.env.GEMINI_MODEL ?? "gemini-3.8-flash", ...fallbacks];
-  const delays = [1000, 3000, 8000];
-  let lastErr: any;
+  const models = params.models ?? [process.env.GEMINI_MODEL ?? "gemini-3.8-flash", ...fallbacks];
 
+  let lastErr: any;
   for (const model of models) {
-    for (let attempt = 0; attempt <= delays.length; attempt++) {
-      try {
-        return await getClient().models.generateContent({
+    const t0 = Date.now();
+    try {
+      return await withTimeout(
+        getClient().models.generateContent({
           model,
           contents: params.contents,
           config: params.config,
-        });
-      } catch (err: any) {
-        lastErr = err;
-        console.log(`[llm] ${model} attempt ${attempt + 1} failed: ${err?.status ?? err}`);
-        if (err?.status !== 503 && err?.status !== 429) throw err;
-        if (attempt < delays.length) await sleep(delays[attempt]);
-      }
+        }),
+        20000
+      );
+    } catch (err: any) {
+      lastErr = err;
+      console.log(
+        `[llm] ${model} failed after ${Date.now() - t0}ms: ${
+          err?.status ?? String(err?.message ?? err).slice(0, 100)
+        }`
+      );
     }
   }
   throw lastErr;

@@ -141,8 +141,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshPending();
     refreshInvoices();
-    const a = setInterval(refreshPending, 3000);
-    const b = setInterval(refreshInvoices, 8000);
+    const tick = (fn: () => void) => () => {
+      if (!document.hidden) fn();
+    };
+    const a = setInterval(tick(refreshPending), 5000);
+    const b = setInterval(tick(refreshInvoices), 10000);
     return () => {
       clearInterval(a);
       clearInterval(b);

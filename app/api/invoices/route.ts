@@ -1,6 +1,8 @@
+import { connection } from "next/server";
 import { listInvoices } from "@/lib/paypal";
 
 export async function GET() {
+  await connection();
   try {
     return Response.json({ invoices: await listInvoices(50) });
   } catch (err: any) {
