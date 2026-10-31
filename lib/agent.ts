@@ -40,14 +40,26 @@ export async function runAgent(history: ChatMessage[]) {
   }));
   const newPending: PendingAction[] = [];
   const steps: AgentStep[] = [];
+  const deadline = Date.now() + 70_000;
 
   for (let round = 0; round < 6; round++) {
+    if (Date.now() > deadline) {
+      console.log("[agent] time budget exceeded");
+      return {
+        reply: "That is taking longer than expected. The AI service may be busy, so please try again in a moment.",
+        pending: newPending,
+        steps,
+      };
+    }
+
+    console.log(`[agent] round ${round + 1}: calling model`);
     const res = await generate({
       contents,
       config: { systemInstruction: SYSTEM, tools: [{ functionDeclarations }] },
     });
 
     const calls = res.functionCalls ?? [];
+    console.log(`[agent] round ${round + 1}: model returned ${calls.length} tool call(s)`);
     if (calls.length === 0) return { reply: res.text ?? "", pending: newPending, steps };
 
     const modelContent = res.candidates?.[0]?.content;
@@ -58,6 +70,8 @@ export async function runAgent(history: ChatMessage[]) {
       const name = call.name as string;
       const args = (call.args ?? {}) as Record<string, any>;
       steps.push({ tool: name, label: LABELS[name] ?? name, risky: RISKY.has(name), args });
+      console.log(`[agent] tool ${name}: start`);
+      const t0 = Date.now();
       let output: any;
       try {
         if (RISKY.has(name)) {
@@ -71,7 +85,9 @@ export async function runAgent(history: ChatMessage[]) {
         } else {
           output = await runSafeTool(name, args);
         }
+        console.log(`[agent] tool ${name}: ok in ${Date.now() - t0}ms`);
       } catch (err: any) {
+        console.log(`[agent] tool ${name}: failed in ${Date.now() - t0}ms: ${String(err.message ?? err).slice(0, 160)}`);
         output = { error: String(err.message ?? err) };
       }
       responseParts.push({ functionResponse: { name, response: { output } } });
